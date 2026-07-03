@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-07-03
+
 ### Fixed
+- **`zotero_get_search_database_status` no longer reports "0 documents / not initialized" against a populated database** — ChromaDB ≥1.x's embedding-function conflict check rejected the status reader's no-op embedding function; it now identifies as `"default"`, which short-circuits the check for any persisted backend (#362, #364).
+- **Semantic search with the reranker enabled no longer times out** — the cross-encoder was reloaded from disk on every request (~30s per call); it is now cached process-wide and warmed up in the background at server start, so reranked searches are sub-second after the first load (#283, #365).
 - **Ollama embeddings now use the current `/api/embed` endpoint** instead of the deprecated `/api/embeddings` route. The whole batch is sent in a single request (`input`) rather than one request per document, and the response's `embeddings` list is parsed accordingly (#349, #360).
 
 ## [0.6.0] - 2026-06-22
