@@ -19,7 +19,7 @@ services:
       - path: .env
         required: false
     environment:
-      ZOTERO_LOCAL: "${ZOTERO_LOCAL:-false}"
+      ZOTERO_LOCAL: "${ZOTERO_LOCAL:-true}"
       ZOTERO_LIBRARY_TYPE: "${ZOTERO_LIBRARY_TYPE:-user}"
       ZOTERO_MCP_LOG_LEVEL: "${ZOTERO_MCP_LOG_LEVEL:-INFO}"
     extra_hosts:
@@ -36,6 +36,54 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+
+  zotero-local-api-proxy:
+    image: ghcr.io/endofthestars/zotero-mcp:0.6.1
+    container_name: zotero-local-api-proxy
+    restart: unless-stopped
+    init: true
+    network_mode: service:zotero-mcp
+    depends_on:
+      - zotero-mcp
+    entrypoint:
+      - python
+      - -c
+      - |
+        import asyncio
+        import os
+
+        listen_host = os.getenv("ZOTERO_LOCAL_PROXY_LISTEN_HOST", "127.0.0.1")
+        listen_port = int(os.getenv("ZOTERO_LOCAL_PROXY_LISTEN_PORT", "23119"))
+        target_host = os.getenv("ZOTERO_LOCAL_PROXY_TARGET_HOST", "host.docker.internal")
+        target_port = int(os.getenv("ZOTERO_LOCAL_PROXY_TARGET_PORT", "23119"))
+
+        async def pipe(reader, writer):
+            try:
+                while data := await reader.read(65536):
+                    writer.write(data)
+                    await writer.drain()
+            finally:
+                writer.close()
+                await writer.wait_closed()
+
+        async def handle_client(client_reader, client_writer):
+            try:
+                target_reader, target_writer = await asyncio.open_connection(target_host, target_port)
+                await asyncio.gather(
+                    pipe(client_reader, target_writer),
+                    pipe(target_reader, client_writer),
+                )
+            except Exception:
+                client_writer.close()
+                await client_writer.wait_closed()
+
+        async def main():
+            server = await asyncio.start_server(handle_client, listen_host, listen_port)
+            print(f"Proxying {listen_host}:{listen_port} to {target_host}:{target_port}", flush=True)
+            async with server:
+                await server.serve_forever()
+
+        asyncio.run(main())
 
 volumes:
   zotero_mcp_config:
