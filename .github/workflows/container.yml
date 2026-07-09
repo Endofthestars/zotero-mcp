@@ -24,6 +24,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Extract package version
+        id: version
+        shell: bash
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          from pathlib import Path
+          import re
+
+          text = Path("src/zotero_mcp/_version.py").read_text()
+          match = re.search(r'__version__\s*=\s*"([^"]+)"', text)
+          if not match:
+              raise SystemExit("Unable to find __version__")
+          print(f"version={match.group(1)}")
+          PY
+
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v6
@@ -36,6 +51,8 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ steps.version.outputs.version }},enable={{is_default_branch}}
+            type=raw,value=v${{ steps.version.outputs.version }},enable={{is_default_branch}}
             type=sha
 
       - name: Login to GitHub Container Registry
